@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="MatrixBasedConvolution-mbc",
+    name="MatrixBasedConvolution",
     version="0.1.0",
     author="jarod ketcha",
     author_email="jarod.ketchakouakep@unamur.be",
