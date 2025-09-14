@@ -11,7 +11,7 @@ class matrix_conv_1d(object):
                         stride=1,
                         padding='valid',
                         use_phi=True,
-                        activation="relu",
+                        activation=None,
                         use_lambda_out=False,
                         use_lambda_in=False,):
 
@@ -43,7 +43,7 @@ class matrix_conv_1d(object):
             raise ValueError("self.kernel_size must be odd")
             
         if self.padding == "same" and self.stride==1:
-            self.P = tf.math.floor((self.kernel_size-1) / 2)
+            self.P = int(tf.math.floor((self.kernel_size-1) / 2))
             self.input_shape=input_shape[1]+2*self.P
             self.output_shape: int = input_shape[1]
             self.pad=tf.pad(tf.linalg.diag(tf.ones((input_shape[1],),dtype=tf.float32)), paddings=[[self.P , self.P ], [0, 0]], mode='CONSTANT', constant_values=0)
@@ -52,7 +52,7 @@ class matrix_conv_1d(object):
         elif self.padding == "valid" and self.stride>=1:
             self.P =0
             self.input_shape=input_shape[1]
-            self.output_shape: int = tf.math.floor((self.input_shape + 2*self.P- self.kernel_size) / self.stride) + 1
+            self.output_shape: int = int(tf.math.floor((self.input_shape + 2*self.P- self.kernel_size) / self.stride) + 1)
             self.pad=tf.linalg.diag(tf.ones((input_shape[1],),dtype=tf.float32))
             self.indices_phi()
         else:
@@ -135,23 +135,18 @@ class matrix_conv_1d(object):
 
 
 class matrix_conv_2d(object):
-    """_summary_
-
-    Args:
-        object (_type_): _description_
-    """
     def __init__(self,kernel_size=3,
-                      strides=1,
-                      padding='VALID',
+                      stride=1,
+                      padding='valid',
                       use_phi=True,
                       activation=None,
                       use_lambda_out=False,
-                      use_lambda_in=False,):
+                      use_lambda_in=False):
 
 
 
         self.use_phi = use_phi
-        self.strides = strides
+        self.stride = stride
         self.padding = padding
         self.kernel_size = kernel_size
         self.use_lambda_out = use_lambda_out
@@ -160,27 +155,23 @@ class matrix_conv_2d(object):
 
     def build(self, input_shape):
         
-        if self.padding not in ["SAME", "VALID"]:
-            raise ValueError("Padding must be 'SAME' or 'VALID'.")
-        if self.strides < 1:
-            raise ValueError("Strides must be >= 1.")
-        if self.strides > 1 and self.padding == "SAME":
-            raise ValueError("Not implemented: padding='SAME' and strides>1. If padding='SAME', strides=1.")
+        if self.padding not in {"same", "valid"}:
+            raise ValueError("Padding must be 'same' or 'valid'.")
+        if self.stride < 1:
+            raise ValueError("stride must be >= 1.")
+        if self.stride > 1 and self.padding == "SAME":
+            raise ValueError("Not implemented: padding='SAME' and stride>1. If padding='SAME', stride=1.")
         if self.kernel_size <= 1:
             raise ValueError("Kernel size must be >= 1.")
         if self.kernel_size % 2 == 0:
             raise ValueError("Kernel size must be odd.")
         if not isinstance(input_shape, tf.TensorShape):
-            if isinstance(input_shape, (list, tuple)):
-                input_shape = tf.TensorShape(input_shape)
-            else:
-                raise ValueError("Input shape must be a list, tuple, or TensorShape.")
+            if not isinstance(input_shape, (list, tuple)):
+                raise ValueError("Input shape must be a tf.TensorShape or a tuple/list.")
         
-        
-
         # -----------------------------------------matrix_pad------------------------------------
         if self.padding == "same":
-            self.P = tf.math.floor((self.kernel_size - 1) / 2)
+            self.P = int(tf.math.floor((self.kernel_size - 1) / 2))
             self.input_shape: Tuple = input_shape[1] + 2 * self.P, input_shape[2] + 2 * self.P
             self.pad = build_matrix_padding(input_shape=(input_shape[1], input_shape[2]), pad=self.P)
             self.indices_phi()
@@ -191,19 +182,20 @@ class matrix_conv_2d(object):
         else:
             raise ValueError("Padding not found. Use 'same' or 'valid'.")
 
+        # print("Input shape after padding:", self.input_shape)
+        
 
         # \kernel phi
         if self.use_phi:
-            self.kernel = tf.random.uniform(shape=(self.kernel_size,self.kernel_size),minval=-0.5,maxval=0.5) 
+            self.kernel = tf.random.uniform(shape=(self.kernel_size*self.kernel_size,),minval=-0.5,maxval=0.5) 
         else:
-            self.kernel = tf.ones((self.kernel_size,self.kernel_size),dtype=tf.float32)
+            self.kernel = tf.ones((self.kernel_size*self.kernel_size,),dtype=tf.float32)
 
         # \phi
         self.phi = tf.sparse.to_dense(tf.sparse.SparseTensor(indices=self.indices,
-                                                             values= tf.reshape(tf.tile(tf.expand_dims(self.kernel, axis=0), [self.output_shape[0]*self.output_shape[1], 1]),
-                                                             shape=(self.output_shape[0]*self.output_shape[1] * self.kernel_size,)),
-                                                             dense_shape=(self.output_shape[0]*self.output_shape[1],self.input_shape[0]*self.input_shape[1])))
-
+                                                             values= tf.reshape(tf.tile(tf.expand_dims(self.kernel, axis=0), [int(self.output_shape[0]*self.output_shape[1]), 1]),
+                                                             shape=(int(self.output_shape[0]*self.output_shape[1] * self.kernel_size*self.kernel_size),)),
+                                                             dense_shape=(int(self.output_shape[0]*self.output_shape[1]),int(self.input_shape[0]*self.input_shape[1]))))
         # \lambda_in
         if self.use_lambda_in:
             lambda_in = tf.random.uniform(shape=(self.input_shape[0] * self.input_shape[1],),minval=-0.5,maxval=0.5)
@@ -225,10 +217,7 @@ class matrix_conv_2d(object):
                                                                     dense_shape=(self.output_shape[0]*self.output_shape[1],self.output_shape[0]*self.output_shape[1])))
 
             
-        
-        print("Input shape:", self.input_shape)
-        print("Output shape:", self.output_shape)
-        exit(0)
+    
         # ---------------------------------------------------------------------------------------
         self.custom = True
 
@@ -249,11 +238,10 @@ class matrix_conv_2d(object):
         upFlatten = tf.matmul(a=self.pad, b=flatten)
         upFlatten=tf.transpose(upFlatten, perm=[2, 0, 1])
         
-        
         # -----------------------------------Outputs-------------------------------------------------
-        outputs = tf.matmul(a=upFlatten, b=kernel)
+        outputs = tf.matmul(a=upFlatten, b=kernel, transpose_b=True)
         outputs = tf.transpose(outputs, perm=[1, 2, 0])
-        outputs = tf.reshape(outputs, shape=(-1, self.output_shape[0], self.output_shape[1]))
+        outputs = tf.reshape(outputs, shape=(-1, self.output_shape[0], self.output_shape[1], inputs.shape[3]))
 
         if self.activation is not None:
             outputs = self.activation(outputs)
@@ -270,21 +258,23 @@ class matrix_conv_2d(object):
         self.indices: List[Tuple] = list()
         self.indices_in: List[Tuple] = list()
         self.indices_out: List[Tuple] = list()
-        self.output_shape: Tuple = tf.math.floor((self.input_shape[0] - self.kernel_size) / self.strides) + 1, tf.math.floor((self.input_shape[1] - self.kernel_size) / self.strides) + 1
+        self.output_shape: Tuple = int(tf.math.floor((self.input_shape[0] - self.kernel_size) / self.stride) + 1), int(tf.math.floor((self.input_shape[1] - self.kernel_size) / self.stride) + 1)
 
-        for j in range(self.input_shape[1] * self.input_shape[0]):
+        for j in range(int(self.input_shape[1] * self.input_shape[0])):
             self.indices_in.append((j,j))
         
-        for i in range(self.output_shape[1] * self.output_shape[0]):
+        for i in range(int(self.output_shape[1] * self.output_shape[0])):
             self.indices_out.append((i,i))
         
-        for i in range(self.output_shape[0] * self.output_shape[1]):
-            if i == count * (self.output_shape[1]):
+        count: int = 1
+        shift: int = 0
+        for i in range(int(self.output_shape[0] * self.output_shape[1])):
+            if i == count * self.output_shape[1]:
                 count += 1
-                shift += self.kernel_size + (self.strides - 1) * self.input_shape[1]
+                shift += self.kernel_size + (self.stride - 1) * self.input_shape[1]
             else:
                 if shift:
-                    shift += self.strides
+                    shift += self.stride
                 else:
                     shift += 1
             for block in range(self.kernel_size):
