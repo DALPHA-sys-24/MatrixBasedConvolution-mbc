@@ -92,13 +92,6 @@ class matrix_conv_1d(object):
             
         self.lambda_out = tf.sparse.to_dense(tf.sparse.SparseTensor(indices=self.indices_out, values=lambda_out,dense_shape=(self.output_shape,self.output_shape)))
         
-        self.custom = True
-        
-    
-    def conv(self, inputs: tf.Tensor):
-        if not self.custom:
-            raise ValueError("The layer has not been built yet.")
-
         # encode = phi @ lambda_in
         encode = tf.matmul(self.phi, self.lambda_in)
 
@@ -106,11 +99,19 @@ class matrix_conv_1d(object):
         decode = tf.matmul( self.lambda_out,self.phi)
         
         # kernel = encode - decode
-        kernel = encode - decode
+        self.noyau = encode - decode
+        self.custom = True
+        
+    
+    def conv(self, inputs: tf.Tensor):
+        if not self.custom:
+            raise ValueError("The layer has not been built yet.")
+
+
 
         # apply padding then matmul
         outputs = tf.matmul(self.pad, inputs, transpose_b=True)  
-        outputs = tf.matmul(kernel, outputs)                     
+        outputs = tf.matmul(self.noyau, outputs)                     
         outputs = tf.transpose(outputs)                          
 
         if self.activation is not None:
@@ -215,7 +216,14 @@ class matrix_conv_2d(object):
         self.lambda_out = tf.sparse.to_dense(tf.sparse.SparseTensor(indices=self.indices_out,
                                                                     values=lambda_out,
                                                                     dense_shape=(self.output_shape[0]*self.output_shape[1],self.output_shape[0]*self.output_shape[1])))
+        # encode = phi @ lambda_in
+        encode = tf.matmul(self.phi, self.lambda_in)
 
+        # decode = phi^T @ lambda_out
+        decode = tf.matmul( self.lambda_out,self.phi)
+    
+        # noyau = encode - decode
+        self.noyau = encode - decode
             
     
         # ---------------------------------------------------------------------------------------
@@ -225,21 +233,13 @@ class matrix_conv_2d(object):
         if not self.custom:
             raise ValueError("The layer has not been built yet.")
         # ----------------------------------Inputs---------------------------------------------
-        # encode = phi @ lambda_in
-        encode = tf.matmul(self.phi, self.lambda_in)
-
-        # decode = phi^T @ lambda_out
-        decode = tf.matmul( self.lambda_out,self.phi)
-    
-        # kernel = encode - decode
-        kernel = encode - decode
-        
+  
         flatten = tf.reshape(inputs, shape=(-1, inputs.shape[1] * inputs.shape[2], inputs.shape[3]))
         upFlatten = tf.matmul(a=self.pad, b=flatten)
         upFlatten=tf.transpose(upFlatten, perm=[2, 0, 1])
         
         # -----------------------------------Outputs-------------------------------------------------
-        outputs = tf.matmul(a=upFlatten, b=kernel, transpose_b=True)
+        outputs = tf.matmul(a=upFlatten, b=self.noyau , transpose_b=True)
         outputs = tf.transpose(outputs, perm=[1, 2, 0])
         outputs = tf.reshape(outputs, shape=(-1, self.output_shape[0], self.output_shape[1], inputs.shape[3]))
 
@@ -247,13 +247,13 @@ class matrix_conv_2d(object):
             outputs = self.activation(outputs)
         else:
             pass
-
         return outputs    
     
     @tf.function(jit_compile=True)
     def conv_jit(self, inputs: tf.Tensor):
          return self.conv(inputs)
 
+    
     def indices_phi(self, *args):
         self.indices: List[Tuple] = list()
         self.indices_in: List[Tuple] = list()
